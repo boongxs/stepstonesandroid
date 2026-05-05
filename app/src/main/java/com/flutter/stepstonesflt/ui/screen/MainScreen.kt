@@ -8,9 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,13 +21,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -35,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.ui.components.AlbumSelector
 import com.flutter.stepstonesflt.ui.components.StepstonesSearchBar
 import com.flutter.stepstonesflt.ui.viewmodel.MainViewModel
@@ -52,10 +63,27 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     val selectedAlbum by viewModel.selectedAlbum.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val mediaItemCount by viewModel.mediaItemCount.collectAsState()
+    val pendingCount by viewModel.pendingCount.collectAsState()
+    val ingestInProgress by viewModel.ingestInProgress.collectAsState()
 
     val pagerState = rememberPagerState(pageCount = { viewNames.size })
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    Scaffold { paddingValues ->
+    LaunchedEffect(Unit) {
+        viewModel.snackbarMessages.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    LaunchedEffect(pendingCount, albums.size) {
+        if (pendingCount > 0 && albums.size == 1) {
+            viewModel.ingestToAlbum(albums[0])
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -72,7 +100,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
             LibraryHeader(
                 albumName = selectedAlbum?.name ?: "—",
                 itemCount = mediaItemCount,
-                onSelectorClick = { /* album selector handled separately */ },
                 albums = albums,
                 selectedAlbum = selectedAlbum,
                 onAlbumSelected = viewModel::selectAlbum,
@@ -101,6 +128,19 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                 }
             }
         }
+    }
+
+    if (pendingCount > 0 && albums.size > 1) {
+        IngestAlbumPickerDialog(
+            albums = albums,
+            pendingCount = pendingCount,
+            onAlbumPicked = viewModel::ingestToAlbum,
+            onDismiss = viewModel::dismissIngest,
+        )
+    }
+
+    if (ingestInProgress) {
+        IngestProgressDialog()
     }
 }
 
@@ -132,13 +172,12 @@ private fun AppTitle(modifier: Modifier = Modifier) {
 private fun LibraryHeader(
     albumName: String,
     itemCount: Int,
-    onSelectorClick: () -> Unit,
-    albums: List<com.flutter.stepstonesflt.data.local.entity.Album>,
-    selectedAlbum: com.flutter.stepstonesflt.data.local.entity.Album?,
-    onAlbumSelected: (com.flutter.stepstonesflt.data.local.entity.Album) -> Unit,
+    albums: List<Album>,
+    selectedAlbum: Album?,
+    onAlbumSelected: (Album) -> Unit,
     onCreateAlbum: (String) -> Unit,
-    onRenameAlbum: (com.flutter.stepstonesflt.data.local.entity.Album, String) -> Unit,
-    onDeleteAlbum: (com.flutter.stepstonesflt.data.local.entity.Album) -> Unit,
+    onRenameAlbum: (Album, String) -> Unit,
+    onDeleteAlbum: (Album) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -216,6 +255,56 @@ private fun ViewLabel(
             modifier = Modifier.alpha(if (currentPage < pageCount - 1) 1f else 0.2f),
         )
     }
+}
+
+@Composable
+private fun IngestAlbumPickerDialog(
+    albums: List<Album>,
+    pendingCount: Int,
+    onAlbumPicked: (Album) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(if (pendingCount == 1) "Add 1 item to album" else "Add $pendingCount items to album")
+        },
+        text = {
+            LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
+                items(albums) { album ->
+                    TextButton(
+                        onClick = { onAlbumPicked(album) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = album.name,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun IngestProgressDialog() {
+    AlertDialog(
+        onDismissRequest = {},
+        title = { Text("Adding media…") },
+        text = {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        },
+        confirmButton = {},
+    )
 }
 
 @Composable
