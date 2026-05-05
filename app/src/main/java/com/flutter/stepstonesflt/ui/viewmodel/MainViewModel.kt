@@ -68,7 +68,8 @@ class MainViewModel @Inject constructor(
 
     fun createAlbum(name: String) {
         viewModelScope.launch {
-            albumDao.insert(Album(name = name))
+            val id = albumDao.insert(Album(name = name))
+            _selectedAlbumId.value = id
         }
     }
 
