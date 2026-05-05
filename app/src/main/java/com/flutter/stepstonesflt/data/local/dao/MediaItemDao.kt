@@ -31,6 +31,13 @@ interface MediaItemDao {
     @Query("SELECT * FROM media_items WHERE id = :id")
     suspend fun getById(id: Long): MediaItem?
 
+    @Query("""
+        SELECT COUNT(*) FROM media_items mi
+        INNER JOIN media_albums ma ON mi.id = ma.mediaId
+        WHERE ma.albumId = :albumId
+    """)
+    fun countByAlbum(albumId: Long): Flow<Int>
+
     @Query("SELECT * FROM media_items WHERE perceptualHash IS NULL")
     suspend fun getWithoutPHash(): List<MediaItem>
 
