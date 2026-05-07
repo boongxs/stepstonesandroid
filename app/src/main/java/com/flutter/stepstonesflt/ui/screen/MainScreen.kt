@@ -1,6 +1,8 @@
 package com.flutter.stepstonesflt.ui.screen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,7 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,14 +20,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -32,9 +40,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -56,6 +67,8 @@ private val LibraryHeaderBackground = Color(0xFF222222)
 private val LibraryHeaderContent = Color(0xFFDEE4E0)
 private val LibraryHeaderSecondary = Color(0xFFAAAAAA)
 private val FolderIconColor = Color(0xFFFFFFFF)
+private val SelectionHeaderBackground = Color(0xFF1E1E1E)
+private val SelectionHeaderHeight = 64.dp
 
 @Composable
 fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
@@ -65,9 +78,16 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     val mediaItemCount by viewModel.mediaItemCount.collectAsState()
     val pendingCount by viewModel.pendingCount.collectAsState()
     val ingestInProgress by viewModel.ingestInProgress.collectAsState()
-
+    val mediaItems by viewModel.mediaItems.collectAsState()
+    val selectedItemIds by viewModel.selectedItemIds.collectAsState()
+    val isSelectionMode by viewModel.isSelectionMode.collectAsState()
+    val enlargeItemId by viewModel.enlargeItemId.collectAsState()
     val pagerState = rememberPagerState(pageCount = { viewNames.size })
     val snackbarHostState = remember { SnackbarHostState() }
+    val gridState = rememberLazyGridState()
+    val coroutineScope = rememberCoroutineScope()
+
+    val allSelected = mediaItems.isNotEmpty() && selectedItemIds.size == mediaItems.size
 
     LaunchedEffect(Unit) {
         viewModel.snackbarMessages.collect { message ->
@@ -84,48 +104,89 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-        ) {
-            AppTitle(modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
-
-            StepstonesSearchBar(
-                query = searchQuery,
-                onQueryChange = viewModel::setSearchQuery,
-                onSearch = viewModel::triggerSearch,
-            )
-
-            LibraryHeader(
-                albumName = selectedAlbum?.name ?: "—",
-                itemCount = mediaItemCount,
-                albums = albums,
-                selectedAlbum = selectedAlbum,
-                onAlbumSelected = viewModel::selectAlbum,
-                onCreateAlbum = viewModel::createAlbum,
-                onRenameAlbum = viewModel::renameAlbum,
-                onDeleteAlbum = viewModel::deleteAlbum,
-            )
-
-            ViewLabel(
-                currentPage = pagerState.currentPage,
-                pageCount = viewNames.size,
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-            )
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-            ) { page ->
-                when (page) {
-                    0 -> GridPagePlaceholder()
-                    1 -> ReviewPagePlaceholder()
+                    .fillMaxSize()
+                    .padding(paddingValues),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(SelectionHeaderHeight)
+                        .background(SelectionHeaderBackground),
+                ) {
+                    if (isSelectionMode) {
+                        SelectionHeader(
+                            selectedCount = selectedItemIds.size,
+                            totalCount = mediaItems.size,
+                            allSelected = allSelected,
+                            onToggleSelectAll = {
+                                if (allSelected) viewModel.deselectAll() else viewModel.selectAll()
+                            },
+                            onCancel = viewModel::clearSelection,
+                        )
+                    }
                 }
+
+                AppTitle(modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+
+                StepstonesSearchBar(
+                    query = searchQuery,
+                    onQueryChange = viewModel::setSearchQuery,
+                    onSearch = viewModel::triggerSearch,
+                )
+
+                LibraryHeader(
+                    albumName = selectedAlbum?.name ?: "—",
+                    itemCount = mediaItemCount,
+                    albums = albums,
+                    selectedAlbum = selectedAlbum,
+                    onAlbumSelected = viewModel::selectAlbum,
+                    onCreateAlbum = viewModel::createAlbum,
+                    onRenameAlbum = viewModel::renameAlbum,
+                    onDeleteAlbum = viewModel::deleteAlbum,
+                )
+
+                ViewLabel(
+                    currentPage = pagerState.currentPage,
+                    pageCount = viewNames.size,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                )
+
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                ) { page ->
+                    when (page) {
+                        0 -> MediaGridPage(viewModel, gridState)
+                        1 -> ReviewPagePlaceholder()
+                    }
+                }
+            }
+
+            val currentEnlargeId = enlargeItemId
+            if (currentEnlargeId != null) {
+                EnlargeView(
+                    mediaItems = mediaItems,
+                    initialItemId = currentEnlargeId,
+                    albums = albums,
+                    onClose = { currentItemId ->
+                        coroutineScope.launch {
+                            if (currentItemId != null) {
+                                val index = mediaItems.indexOfFirst { it.id == currentItemId }
+                                if (index >= 0) gridState.scrollToItem(index)
+                            }
+                            viewModel.closeEnlargeView()
+                        }
+                    },
+                    onAddToAlbum = viewModel::addEnlargeItemToAlbum,
+                    onDelete = viewModel::deleteSingleItem,
+                )
             }
         }
     }
@@ -141,6 +202,78 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
 
     if (ingestInProgress) {
         IngestProgressDialog()
+    }
+}
+
+@Composable
+private fun SelectionHeader(
+    selectedCount: Int,
+    totalCount: Int,
+    allSelected: Boolean,
+    onToggleSelectAll: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(SelectionHeaderHeight)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Circle + "All" toggle button
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .clickable(onClick = onToggleSelectAll)
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .offset(y = 4.dp),
+        ) {
+            if (allSelected) {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp),
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(22.dp)
+                        .border(2.dp, Color.White, CircleShape)
+                        .background(Color.Black.copy(alpha = 0.3f), CircleShape),
+                )
+            }
+            Text(
+                text = "All",
+                fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        Spacer(Modifier.width(16.dp))
+
+        Text(
+            text = if (selectedCount == 0) "Select items" else "$selectedCount selected",
+            color = MaterialTheme.colorScheme.onSurface,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+
+        IconButton(onClick = onCancel) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Cancel selection",
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
     }
 }
 
@@ -305,17 +438,6 @@ private fun IngestProgressDialog() {
         },
         confirmButton = {},
     )
-}
-
-@Composable
-private fun GridPagePlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = "Media Grid",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
 }
 
 @Composable

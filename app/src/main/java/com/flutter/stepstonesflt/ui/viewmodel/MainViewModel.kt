@@ -4,8 +4,11 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flutter.stepstonesflt.data.local.dao.AlbumDao
+import com.flutter.stepstonesflt.data.local.dao.MediaAlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaItemDao
 import com.flutter.stepstonesflt.data.local.entity.Album
+import com.flutter.stepstonesflt.data.local.entity.MediaAlbum
+import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.repository.IngestRepository
 import com.flutter.stepstonesflt.data.repository.IngestResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -20,13 +23,16 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import javax.inject.Inject
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val albumDao: AlbumDao,
     private val mediaItemDao: MediaItemDao,
+    private val mediaAlbumDao: MediaAlbumDao,
     private val ingestRepository: IngestRepository,
 ) : ViewModel() {
 
@@ -50,6 +56,56 @@ class MainViewModel @Inject constructor(
 
     private val _activeSearchQuery = MutableStateFlow("")
     val activeSearchQuery: StateFlow<String> = _activeSearchQuery.asStateFlow()
+
+    val mediaItems: StateFlow<List<MediaItem>> = combine(selectedAlbum, activeSearchQuery) { album, query ->
+        Pair(album, query)
+    }.flatMapLatest { (album, query) ->
+        when {
+            album == null -> flowOf(emptyList())
+            query.isBlank() -> mediaItemDao.getByAlbum(album.id)
+            else -> mediaItemDao.searchByAlbumAndTag(album.id, query)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Selection
+    private val _selectedItemIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedItemIds: StateFlow<Set<Long>> = _selectedItemIds.asStateFlow()
+
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode: StateFlow<Boolean> = _isSelectionMode.asStateFlow()
+
+    // Enlarge view
+    private val _enlargeItemId = MutableStateFlow<Long?>(null)
+    val enlargeItemId: StateFlow<Long?> = _enlargeItemId.asStateFlow()
+
+    fun openEnlargeView(id: Long) { _enlargeItemId.value = id }
+    fun closeEnlargeView() { _enlargeItemId.value = null }
+
+    fun deleteSingleItem(id: Long) {
+        val albumId = selectedAlbum.value?.id ?: return
+        closeEnlargeView()
+        viewModelScope.launch {
+            mediaAlbumDao.delete(MediaAlbum(id, albumId))
+            if (mediaAlbumDao.albumCountForMedia(id) == 0) {
+                mediaItemDao.getById(id)?.let { item ->
+                    File(item.filePath).delete()
+                    item.thumbnailPath?.let { File(it).delete() }
+                    mediaItemDao.deleteById(id)
+                }
+            }
+        }
+    }
+
+    fun addEnlargeItemToAlbum(id: Long, album: Album) {
+        viewModelScope.launch {
+            if (!mediaAlbumDao.exists(id, album.id)) {
+                mediaAlbumDao.insert(MediaAlbum(id, album.id))
+                _snackbarMessages.tryEmit("Added to ${album.name}")
+            } else {
+                _snackbarMessages.tryEmit("Already in ${album.name}")
+            }
+        }
+    }
 
     // Ingest
     private val _pendingUris = MutableStateFlow<List<Uri>>(emptyList())
@@ -75,6 +131,7 @@ class MainViewModel @Inject constructor(
 
     fun selectAlbum(album: Album) {
         _selectedAlbumId.value = album.id
+        clearSelection()
     }
 
     fun setSearchQuery(query: String) {
@@ -107,6 +164,63 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    // Selection actions
+
+    fun toggleSelection(id: Long) {
+        _isSelectionMode.value = true
+        _selectedItemIds.update { ids -> if (id in ids) ids - id else ids + id }
+    }
+
+    fun selectAll() {
+        _selectedItemIds.value = mediaItems.value.map { it.id }.toSet()
+    }
+
+    fun deselectAll() {
+        _selectedItemIds.value = emptySet()
+    }
+
+    fun clearSelection() {
+        _selectedItemIds.value = emptySet()
+        _isSelectionMode.value = false
+    }
+
+    fun deleteSelected() {
+        val albumId = selectedAlbum.value?.id ?: return
+        val toDelete = _selectedItemIds.value.toSet()
+        clearSelection()
+        viewModelScope.launch {
+            toDelete.forEach { id ->
+                mediaAlbumDao.delete(MediaAlbum(id, albumId))
+                if (mediaAlbumDao.albumCountForMedia(id) == 0) {
+                    mediaItemDao.getById(id)?.let { item ->
+                        File(item.filePath).delete()
+                        item.thumbnailPath?.let { File(it).delete() }
+                        mediaItemDao.deleteById(id)
+                    }
+                }
+            }
+        }
+    }
+
+    fun addSelectedToAlbum(album: Album) {
+        val ids = _selectedItemIds.value.toSet()
+        clearSelection()
+        viewModelScope.launch {
+            val newIds = ids.filterNot { mediaAlbumDao.exists(it, album.id) }
+            if (newIds.isEmpty()) {
+                _snackbarMessages.tryEmit("Already in ${album.name}")
+            } else {
+                newIds.forEach { id -> mediaAlbumDao.insert(MediaAlbum(id, album.id)) }
+                _selectedAlbumId.value = album.id
+            }
+        }
+    }
+
+    fun getSelectedItems(): List<MediaItem> =
+        mediaItems.value.filter { it.id in _selectedItemIds.value }
+
+    // Ingest
 
     fun handleSharedUris(uris: List<Uri>) {
         _pendingUris.value = uris
