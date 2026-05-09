@@ -186,6 +186,10 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                     },
                     onAddToAlbum = viewModel::addEnlargeItemToAlbum,
                     onDelete = viewModel::deleteSingleItem,
+                    onGetItemTags = { id -> viewModel.tagsForItem(id) },
+                    onAddTag = viewModel::addTagToItem,
+                    onRemoveTag = viewModel::removeTagFromItem,
+                    onUpdateDate = viewModel::updateMediaDate,
                 )
             }
         }

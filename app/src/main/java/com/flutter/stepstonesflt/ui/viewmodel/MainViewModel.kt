@@ -6,9 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.flutter.stepstonesflt.data.local.dao.AlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaAlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaItemDao
+import com.flutter.stepstonesflt.data.local.dao.TagDao
 import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.data.local.entity.MediaAlbum
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
+import com.flutter.stepstonesflt.data.local.entity.MediaTag
+import com.flutter.stepstonesflt.data.local.entity.Tag
+import kotlinx.coroutines.flow.Flow
 import com.flutter.stepstonesflt.data.repository.IngestRepository
 import com.flutter.stepstonesflt.data.repository.IngestResult
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,6 +37,7 @@ class MainViewModel @Inject constructor(
     private val albumDao: AlbumDao,
     private val mediaItemDao: MediaItemDao,
     private val mediaAlbumDao: MediaAlbumDao,
+    private val tagDao: TagDao,
     private val ingestRepository: IngestRepository,
 ) : ViewModel() {
 
@@ -219,6 +224,36 @@ class MainViewModel @Inject constructor(
 
     fun getSelectedItems(): List<MediaItem> =
         mediaItems.value.filter { it.id in _selectedItemIds.value }
+
+    // Tags and metadata
+
+    fun tagsForItem(itemId: Long): Flow<List<Tag>> =
+        tagDao.getTagsForMedia(itemId)
+
+    fun addTagToItem(itemId: Long, tagName: String) {
+        viewModelScope.launch {
+            val tag = tagDao.getByName(tagName) ?: run {
+                val id = tagDao.insert(Tag(name = tagName))
+                Tag(id = id, name = tagName)
+            }
+            tagDao.insertMediaTag(MediaTag(itemId, tag.id))
+        }
+    }
+
+    fun removeTagFromItem(itemId: Long, tagId: Long) {
+        viewModelScope.launch {
+            tagDao.deleteMediaTag(MediaTag(itemId, tagId))
+            tagDao.deleteOrphanTags()
+        }
+    }
+
+    fun updateMediaDate(itemId: Long, newDate: Long) {
+        viewModelScope.launch {
+            mediaItemDao.getById(itemId)?.let { item ->
+                mediaItemDao.update(item.copy(mediaDate = newDate))
+            }
+        }
+    }
 
     // Ingest
 

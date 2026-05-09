@@ -49,10 +49,19 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -80,7 +89,9 @@ import coil.request.ImageRequest
 import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
+import com.flutter.stepstonesflt.data.local.entity.Tag
 import java.io.File
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 
 private val EnlargeToolbarBackground = Color(0x8B000000)
@@ -94,6 +105,10 @@ fun EnlargeView(
     onClose: (currentItemId: Long?) -> Unit,
     onAddToAlbum: (Long, Album) -> Unit,
     onDelete: (Long) -> Unit,
+    onGetItemTags: (itemId: Long) -> Flow<List<Tag>>,
+    onAddTag: (itemId: Long, tagName: String) -> Unit,
+    onRemoveTag: (itemId: Long, tagId: Long) -> Unit,
+    onUpdateDate: (itemId: Long, newDate: Long) -> Unit,
 ) {
     val initialPage = mediaItems.indexOfFirst { it.id == initialItemId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialPage) { mediaItems.size }
@@ -107,6 +122,18 @@ fun EnlargeView(
     var playerCurrentMs by remember { mutableStateOf(0L) }
     var playerDurationMs by remember { mutableStateOf(0L) }
     var playerSeekFn by remember { mutableStateOf<((Float) -> Unit)?>(null) }
+    var showInfoPanel by remember { mutableStateOf(false) }
+    val mediaHeightFraction by animateFloatAsState(
+        targetValue = if (showInfoPanel) 0.5f else 1f,
+        animationSpec = tween(300, easing = FastOutSlowInEasing),
+        label = "mediaHeight",
+    )
+
+    val currentPageItemId = mediaItems.getOrNull(pagerState.currentPage)?.id
+    val currentItemTags by produceState<List<Tag>>(emptyList(), currentPageItemId) {
+        if (currentPageItemId != null) onGetItemTags(currentPageItemId).collect { value = it }
+        else value = emptyList()
+    }
 
     LaunchedEffect(pagerState.currentPage) {
         currentScale = 1f
@@ -116,7 +143,10 @@ fun EnlargeView(
     }
 
     val currentItemId = { mediaItems.getOrNull(pagerState.currentPage)?.id }
-    BackHandler { onClose(currentItemId()) }
+    BackHandler {
+        if (showInfoPanel) showInfoPanel = false
+        else onClose(currentItemId())
+    }
 
     Box(
         modifier = Modifier
@@ -127,17 +157,18 @@ fun EnlargeView(
             state = pagerState,
             userScrollEnabled = currentScale <= 1f,
             modifier = Modifier
-                .fillMaxSize()
+                .fillMaxWidth()
+                .fillMaxHeight(mediaHeightFraction)
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
-                ) { toolbarVisible = !toolbarVisible },
+                ) { if (!showInfoPanel) toolbarVisible = !toolbarVisible },
         ) { page ->
             val isActivePage = page == pagerState.currentPage
             EnlargedMediaContent(
                 item = mediaItems[page],
                 shouldPlay = isActivePage,
-                toolbarVisible = toolbarVisible,
+                toolbarVisible = toolbarVisible && !showInfoPanel,
                 isMuted = isMuted,
                 onMuteToggle = { isMuted = !isMuted },
                 onProgressUpdate = if (isActivePage) { ms, dur -> playerCurrentMs = ms; playerDurationMs = dur } else null,
@@ -168,7 +199,7 @@ fun EnlargeView(
 
         val currentItem = mediaItems.getOrNull(pagerState.currentPage)
         val currentItemIsPlayable = currentItem?.fileType == MediaType.VIDEO || currentItem?.fileType == MediaType.AUDIO
-        if (toolbarVisible) Column(
+        if (toolbarVisible && !showInfoPanel) Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
@@ -192,7 +223,7 @@ fun EnlargeView(
                 EnlargeAction(
                     icon = { Icon(Icons.Default.Info, contentDescription = null, tint = Color.White) },
                     label = "Info",
-                    onClick = { /* Step 7 */ },
+                    onClick = { showInfoPanel = true },
                 )
                 EnlargeAction(
                     icon = { Icon(Icons.Default.Share, contentDescription = null, tint = Color.White) },
@@ -208,6 +239,34 @@ fun EnlargeView(
                     icon = { Icon(Icons.Default.Delete, contentDescription = null, tint = Color.White) },
                     label = "Delete",
                     onClick = { showDeleteConfirmDialog = true },
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showInfoPanel && currentItem != null,
+            enter = expandVertically(
+                animationSpec = tween(300, easing = FastOutSlowInEasing),
+                expandFrom = Alignment.Bottom,
+            ) + fadeIn(animationSpec = tween(200)),
+            exit = shrinkVertically(
+                animationSpec = tween(250, easing = FastOutSlowInEasing),
+                shrinkTowards = Alignment.Bottom,
+            ) + fadeOut(animationSpec = tween(150)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.5f),
+        ) {
+            if (currentItem != null) {
+                InfoPanel(
+                    modifier = Modifier.fillMaxSize(),
+                    item = currentItem,
+                    tags = currentItemTags,
+                    onDismiss = { showInfoPanel = false },
+                    onAddTag = { name -> onAddTag(currentItem.id, name) },
+                    onRemoveTag = { tag -> onRemoveTag(currentItem.id, tag.id) },
+                    onUpdateDate = { date -> onUpdateDate(currentItem.id, date) },
                 )
             }
         }
