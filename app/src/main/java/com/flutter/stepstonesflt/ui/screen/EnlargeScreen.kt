@@ -55,6 +55,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -342,6 +343,9 @@ internal fun EnlargedMediaContent(
     var currentMs by remember(item.id) { mutableStateOf(0L) }
     var durationMs by remember(item.id) { mutableStateOf(item.durationMs ?: 0L) }
 
+    val latestOnProgressUpdate by rememberUpdatedState(onProgressUpdate)
+    val latestOnSeekReady by rememberUpdatedState(onSeekReady)
+
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
@@ -349,17 +353,17 @@ internal fun EnlargedMediaContent(
                 if (state == Player.STATE_ENDED) {
                     hasEnded = true
                     currentMs = durationMs
-                    onProgressUpdate?.invoke(durationMs, durationMs)
+                    latestOnProgressUpdate?.invoke(durationMs, durationMs)
                 }
                 if (state == Player.STATE_READY) {
                     val dur = exoPlayer?.duration?.coerceAtLeast(0L) ?: durationMs
                     durationMs = dur
-                    onProgressUpdate?.invoke(currentMs, dur)
-                    onSeekReady?.invoke { fraction ->
+                    latestOnProgressUpdate?.invoke(currentMs, dur)
+                    latestOnSeekReady?.invoke { fraction ->
                         val seekMs = (fraction * durationMs).toLong()
                         exoPlayer?.seekTo(seekMs)
                         currentMs = seekMs
-                        onProgressUpdate?.invoke(seekMs, durationMs)
+                        latestOnProgressUpdate?.invoke(seekMs, durationMs)
                     }
                 }
             }
@@ -380,7 +384,7 @@ internal fun EnlargedMediaContent(
     LaunchedEffect(isPlaying) {
         while (isPlaying) {
             currentMs = exoPlayer?.currentPosition ?: 0L
-            onProgressUpdate?.invoke(currentMs, durationMs)
+            latestOnProgressUpdate?.invoke(currentMs, durationMs)
             delay(100L)
         }
     }
@@ -389,13 +393,13 @@ internal fun EnlargedMediaContent(
         if (shouldPlay) {
             if (!hasEnded) exoPlayer?.play()
             if (exoPlayer?.playbackState == Player.STATE_READY || exoPlayer?.playbackState == Player.STATE_ENDED) {
-                onSeekReady?.invoke { fraction ->
+                latestOnSeekReady?.invoke { fraction ->
                     val seekMs = (fraction * durationMs).toLong()
                     exoPlayer?.seekTo(seekMs)
                     currentMs = seekMs
-                    onProgressUpdate?.invoke(seekMs, durationMs)
+                    latestOnProgressUpdate?.invoke(seekMs, durationMs)
                 }
-                onProgressUpdate?.invoke(currentMs, durationMs)
+                latestOnProgressUpdate?.invoke(currentMs, durationMs)
             }
         } else {
             exoPlayer?.pause()
@@ -593,22 +597,23 @@ private fun SeekBar(
     durationMs: Long,
     onSeek: (Float) -> Unit,
 ) {
+    val currentOnSeek by rememberUpdatedState(onSeek)
     val progress = if (durationMs > 0) (currentMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(20.dp)
-            .pointerInput(durationMs) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown()
-                    onSeek((down.position.x / size.width.toFloat()).coerceIn(0f, 1f))
+                    currentOnSeek((down.position.x / size.width.toFloat()).coerceIn(0f, 1f))
                     down.consume()
                     var keepGoing = true
                     while (keepGoing) {
                         val event = awaitPointerEvent()
                         keepGoing = event.changes.any { it.pressed }
                         event.changes.forEach { change ->
-                            onSeek((change.position.x / size.width.toFloat()).coerceIn(0f, 1f))
+                            currentOnSeek((change.position.x / size.width.toFloat()).coerceIn(0f, 1f))
                             change.consume()
                         }
                     }
