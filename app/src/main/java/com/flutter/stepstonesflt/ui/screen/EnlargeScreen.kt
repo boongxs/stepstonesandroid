@@ -330,7 +330,7 @@ fun EnlargeView(
 
 @OptIn(UnstableApi::class)
 @Composable
-private fun EnlargedMediaContent(
+internal fun EnlargedMediaContent(
     item: MediaItem,
     shouldPlay: Boolean,
     toolbarVisible: Boolean,

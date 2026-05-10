@@ -43,8 +43,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.flutter.stepstonesflt.data.local.entity.Album
+import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.ui.components.AlbumSelector
 import com.flutter.stepstonesflt.ui.components.StepstonesSearchBar
 import com.flutter.stepstonesflt.ui.viewmodel.MainViewModel
@@ -84,6 +87,9 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     val selectedItemIds by viewModel.selectedItemIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val enlargeItemId by viewModel.enlargeItemId.collectAsState()
+    val pendingReviewCount by viewModel.pendingReviewCount.collectAsState()
+    var reviewPagerItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
+    var reviewPagerInitialId by remember { mutableStateOf<Long?>(null) }
     val pagerState = rememberPagerState(pageCount = { viewNames.size })
     val snackbarHostState = remember { SnackbarHostState() }
     val gridState = rememberLazyGridState()
@@ -153,6 +159,7 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                 ViewLabel(
                     currentPage = pagerState.currentPage,
                     pageCount = viewNames.size,
+                    pendingReviewCount = pendingReviewCount,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 4.dp),
@@ -166,9 +173,21 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                 ) { page ->
                     when (page) {
                         0 -> MediaGridPage(viewModel, gridState)
-                        1 -> ReviewPagePlaceholder()
+                        1 -> ReviewPage(viewModel, onOpenPager = { id, items ->
+                            reviewPagerInitialId = id
+                            reviewPagerItems = items
+                        })
                     }
                 }
+            }
+
+            val pagerInitialId = reviewPagerInitialId
+            if (pagerInitialId != null && reviewPagerItems.isNotEmpty()) {
+                ReviewPagerView(
+                    items = reviewPagerItems,
+                    initialItemId = pagerInitialId,
+                    onClose = { reviewPagerInitialId = null },
+                )
             }
 
             val currentEnlargeId = enlargeItemId
@@ -383,8 +402,11 @@ private fun LibraryHeader(
 private fun ViewLabel(
     currentPage: Int,
     pageCount: Int,
+    pendingReviewCount: Int,
     modifier: Modifier = Modifier,
 ) {
+    val hasPending = pendingReviewCount > 0
+
     Row(
         modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
@@ -402,12 +424,23 @@ private fun ViewLabel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
-        Icon(
-            imageVector = Icons.Default.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.alpha(if (currentPage < pageCount - 1) 1f else 0.2f),
-        )
+        Box {
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.alpha(if (currentPage < pageCount - 1) 1f else 0.2f),
+            )
+            if (hasPending && currentPage == 0) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-2).dp)
+                        .background(SubtitleColor, CircleShape),
+                )
+            }
+        }
     }
 }
 
@@ -460,13 +493,3 @@ private fun IngestProgressDialog() {
     )
 }
 
-@Composable
-private fun ReviewPagePlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text(
-            text = "Review",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}

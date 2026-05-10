@@ -41,6 +41,13 @@ interface MediaItemDao {
     @Query("SELECT * FROM media_items WHERE perceptualHash IS NULL")
     suspend fun getWithoutPHash(): List<MediaItem>
 
+    @Query("""
+        SELECT mi.* FROM media_items mi
+        INNER JOIN media_albums ma ON mi.id = ma.mediaId
+        WHERE ma.albumId = :albumId AND mi.perceptualHash IS NOT NULL
+    """)
+    suspend fun getHashedItemsForAlbum(albumId: Long): List<MediaItem>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(item: MediaItem): Long
 
