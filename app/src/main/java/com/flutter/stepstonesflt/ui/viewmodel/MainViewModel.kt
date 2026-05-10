@@ -13,11 +13,14 @@ import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaTag
 import com.flutter.stepstonesflt.data.local.entity.Tag
 import kotlinx.coroutines.flow.Flow
+import com.flutter.stepstonesflt.data.repository.BundleExportRepository
+import com.flutter.stepstonesflt.data.repository.BundleImportRepository
 import com.flutter.stepstonesflt.data.repository.IngestRepository
 import com.flutter.stepstonesflt.data.repository.IngestResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -39,6 +42,8 @@ class MainViewModel @Inject constructor(
     private val mediaAlbumDao: MediaAlbumDao,
     private val tagDao: TagDao,
     private val ingestRepository: IngestRepository,
+    private val bundleExportRepository: BundleExportRepository,
+    private val bundleImportRepository: BundleImportRepository,
 ) : ViewModel() {
 
     private val _selectedAlbumId = MutableStateFlow(-1L)
@@ -254,6 +259,57 @@ class MainViewModel @Inject constructor(
             }
         }
     }
+
+    // Export / Import
+
+    private val _exportInProgress = MutableStateFlow(false)
+    val exportInProgress: StateFlow<Boolean> = _exportInProgress.asStateFlow()
+
+    private val _exportReady = MutableSharedFlow<File>(extraBufferCapacity = 1)
+    val exportReady: SharedFlow<File> = _exportReady.asSharedFlow()
+
+    private val _pendingBundleUri = MutableStateFlow<Uri?>(null)
+    val pendingBundleUri: StateFlow<Uri?> = _pendingBundleUri.asStateFlow()
+
+    private val _importInProgress = MutableStateFlow(false)
+    val importInProgress: StateFlow<Boolean> = _importInProgress.asStateFlow()
+
+    fun exportSelected() {
+        val items = getSelectedItems()
+        clearSelection()
+        _exportInProgress.value = true
+        viewModelScope.launch {
+            try {
+                val tagMap = items.associate { it.id to tagDao.getTagsForMediaOnce(it.id) }
+                val file = bundleExportRepository.export(items, tagMap)
+                _exportReady.tryEmit(file)
+            } catch (e: Exception) {
+                _snackbarMessages.tryEmit("Export failed")
+            } finally {
+                _exportInProgress.value = false
+            }
+        }
+    }
+
+    fun handleBundleImportUri(uri: Uri) { _pendingBundleUri.value = uri }
+
+    fun importBundle(uri: Uri, album: Album) {
+        _pendingBundleUri.value = null
+        _importInProgress.value = true
+        viewModelScope.launch {
+            try {
+                val summary = bundleImportRepository.import(uri, album.id)
+                if (selectedAlbum.value?.id != album.id) selectAlbum(album)
+                _snackbarMessages.tryEmit(summary.toMessage())
+            } catch (e: Exception) {
+                _snackbarMessages.tryEmit("Import failed")
+            } finally {
+                _importInProgress.value = false
+            }
+        }
+    }
+
+    fun dismissBundleImport() { _pendingBundleUri.value = null }
 
     // Ingest
 

@@ -45,7 +45,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,10 +82,23 @@ fun MediaGridPage(viewModel: MainViewModel, gridState: LazyGridState) {
     val selectedItemIds by viewModel.selectedItemIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val albums by viewModel.albums.collectAsState()
+    val exportInProgress by viewModel.exportInProgress.collectAsState()
     val context = LocalContext.current
 
     var showAddToAlbumDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.exportReady.collect { file ->
+            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/x-stepstone"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(intent, "Share bundle"))
+        }
+    }
 
     BackHandler(enabled = isSelectionMode) {
         viewModel.clearSelection()
@@ -125,6 +140,17 @@ fun MediaGridPage(viewModel: MainViewModel, gridState: LazyGridState) {
             }
         }
 
+        if (exportInProgress) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator()
+            }
+        }
+
         AnimatedVisibility(
             visible = isSelectionMode,
             enter = slideInVertically(initialOffsetY = { it }),
@@ -137,7 +163,7 @@ fun MediaGridPage(viewModel: MainViewModel, gridState: LazyGridState) {
                     viewModel.clearSelection()
                 },
                 onDelete = { showDeleteConfirmDialog = true },
-                onExport = { /* Step 8 */ },
+                onExport = viewModel::exportSelected,
                 onAddToAlbum = { showAddToAlbumDialog = true },
             )
         }

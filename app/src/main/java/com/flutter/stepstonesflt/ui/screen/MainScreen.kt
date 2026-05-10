@@ -78,6 +78,8 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     val mediaItemCount by viewModel.mediaItemCount.collectAsState()
     val pendingCount by viewModel.pendingCount.collectAsState()
     val ingestInProgress by viewModel.ingestInProgress.collectAsState()
+    val pendingBundleUri by viewModel.pendingBundleUri.collectAsState()
+    val importInProgress by viewModel.importInProgress.collectAsState()
     val mediaItems by viewModel.mediaItems.collectAsState()
     val selectedItemIds by viewModel.selectedItemIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
@@ -205,6 +207,21 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     }
 
     if (ingestInProgress) {
+        IngestProgressDialog()
+    }
+
+    val bundleUri = pendingBundleUri
+    if (bundleUri != null) {
+        IngestAlbumPickerDialog(
+            albums = albums,
+            pendingCount = 1,
+            onAlbumPicked = { viewModel.importBundle(bundleUri, it) },
+            onDismiss = viewModel::dismissBundleImport,
+            title = "Import bundle to album",
+        )
+    }
+
+    if (importInProgress) {
         IngestProgressDialog()
     }
 }
@@ -400,12 +417,11 @@ private fun IngestAlbumPickerDialog(
     pendingCount: Int,
     onAlbumPicked: (Album) -> Unit,
     onDismiss: () -> Unit,
+    title: String = if (pendingCount == 1) "Add 1 item to album" else "Add $pendingCount items to album",
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(if (pendingCount == 1) "Add 1 item to album" else "Add $pendingCount items to album")
-        },
+        title = { Text(title) },
         text = {
             LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
                 items(albums) { album ->

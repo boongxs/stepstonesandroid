@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -37,13 +38,31 @@ class MainActivity : ComponentActivity() {
         when (intent?.action) {
             Intent.ACTION_SEND -> {
                 val uri = intentUri(intent) ?: return
-                viewModel.handleSharedUris(listOf(uri))
+                if (resolveDisplayName(uri).endsWith(".stepstone", ignoreCase = true)) {
+                    viewModel.handleBundleImportUri(uri)
+                } else {
+                    viewModel.handleSharedUris(listOf(uri))
+                }
             }
             Intent.ACTION_SEND_MULTIPLE -> {
                 val uris = intentUriList(intent) ?: return
                 viewModel.handleSharedUris(uris)
             }
+            Intent.ACTION_VIEW -> {
+                val uri = intent.data ?: return
+                if (resolveDisplayName(uri).endsWith(".stepstone", ignoreCase = true)) {
+                    viewModel.handleBundleImportUri(uri)
+                }
+            }
         }
+    }
+
+    private fun resolveDisplayName(uri: Uri): String {
+        contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && col >= 0) return cursor.getString(col)
+        }
+        return uri.lastPathSegment ?: ""
     }
 
     private fun intentUri(intent: Intent): Uri? =
