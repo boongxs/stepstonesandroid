@@ -202,16 +202,9 @@ private fun InfoRow(
     onClick: () -> Unit = {},
 ) {
     Row(
-        modifier = if (clickable) {
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(vertical = 6.dp)
-        } else {
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 4.dp)
-        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = if (clickable) 6.dp else 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -225,6 +218,7 @@ private fun InfoRow(
             fontSize = 13.sp,
             color = if (clickable) InfoClickableColor else InfoValueColor,
             fontWeight = if (clickable) FontWeight.Medium else FontWeight.Normal,
+            modifier = if (clickable) Modifier.clickable(onClick = onClick) else Modifier,
         )
     }
 }

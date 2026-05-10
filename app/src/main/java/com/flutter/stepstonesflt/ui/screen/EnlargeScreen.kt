@@ -49,14 +49,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -126,11 +118,6 @@ fun EnlargeView(
     var playerDurationMs by remember { mutableStateOf(0L) }
     var playerSeekFn by remember { mutableStateOf<((Float) -> Unit)?>(null) }
     var showInfoPanel by remember { mutableStateOf(false) }
-    val mediaHeightFraction by animateFloatAsState(
-        targetValue = if (showInfoPanel) 0.5f else 1f,
-        animationSpec = tween(300, easing = FastOutSlowInEasing),
-        label = "mediaHeight",
-    )
 
     val currentPageItemId = mediaItems.getOrNull(pagerState.currentPage)?.id
     val currentItemTags by produceState<List<Tag>>(emptyList(), currentPageItemId) {
@@ -161,7 +148,7 @@ fun EnlargeView(
             userScrollEnabled = currentScale <= 1f,
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(mediaHeightFraction)
+                .fillMaxHeight(if (showInfoPanel) 0.5f else 1f)
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
@@ -246,32 +233,19 @@ fun EnlargeView(
             }
         }
 
-        AnimatedVisibility(
-            visible = showInfoPanel && currentItem != null,
-            enter = expandVertically(
-                animationSpec = tween(300, easing = FastOutSlowInEasing),
-                expandFrom = Alignment.Bottom,
-            ) + fadeIn(animationSpec = tween(200)),
-            exit = shrinkVertically(
-                animationSpec = tween(250, easing = FastOutSlowInEasing),
-                shrinkTowards = Alignment.Bottom,
-            ) + fadeOut(animationSpec = tween(150)),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(0.5f),
-        ) {
-            if (currentItem != null) {
-                InfoPanel(
-                    modifier = Modifier.fillMaxSize(),
-                    item = currentItem,
-                    tags = currentItemTags,
-                    onDismiss = { showInfoPanel = false },
-                    onAddTag = { name -> onAddTag(currentItem.id, name) },
-                    onRemoveTag = { tag -> onRemoveTag(currentItem.id, tag.id) },
-                    onUpdateDate = { date -> onUpdateDate(currentItem.id, date) },
-                )
-            }
+        if (showInfoPanel && currentItem != null) {
+            InfoPanel(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f),
+                item = currentItem,
+                tags = currentItemTags,
+                onDismiss = { showInfoPanel = false },
+                onAddTag = { name -> onAddTag(currentItem.id, name) },
+                onRemoveTag = { tag -> onRemoveTag(currentItem.id, tag.id) },
+                onUpdateDate = { date -> onUpdateDate(currentItem.id, date) },
+            )
         }
     }
 
