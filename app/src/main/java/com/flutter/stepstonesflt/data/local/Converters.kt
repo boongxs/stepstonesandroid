@@ -8,5 +8,6 @@ class Converters {
     fun fromMediaType(type: MediaType): String = type.name
 
     @TypeConverter
-    fun toMediaType(value: String): MediaType = MediaType.valueOf(value)
+    fun toMediaType(value: String): MediaType =
+        runCatching { MediaType.valueOf(value) }.getOrDefault(MediaType.IMAGE)
 }

@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
 import com.flutter.stepstonesflt.data.local.entity.Tag
+import com.flutter.stepstonesflt.util.formatDurationMs
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -166,7 +167,7 @@ fun InfoPanel(
             }
             InfoRow(label = "Size", value = fileSize)
             if ((item.fileType == MediaType.VIDEO || item.fileType == MediaType.AUDIO) && item.durationMs != null) {
-                InfoRow(label = "Duration", value = infoPanelFormatMs(item.durationMs))
+                InfoRow(label = "Duration", value = formatDurationMs(item.durationMs))
             }
         }
 
@@ -223,9 +224,3 @@ private fun InfoRow(
     }
 }
 
-private fun infoPanelFormatMs(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "$minutes:${seconds.toString().padStart(2, '0')}"
-}

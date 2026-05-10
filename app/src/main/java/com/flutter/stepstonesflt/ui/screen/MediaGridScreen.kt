@@ -69,6 +69,7 @@ import coil.request.ImageRequest
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
 import com.flutter.stepstonesflt.ui.viewmodel.MainViewModel
+import com.flutter.stepstonesflt.util.formatDurationMs
 import java.io.File
 
 private val SelectionToolbarBackground = Color(0xFF1E1E1E)
@@ -252,7 +253,7 @@ private fun MediaGridCell(
         // Badge (bottom-end)
         val badge = when (item.fileType) {
             MediaType.GIF -> "GIF"
-            MediaType.VIDEO, MediaType.AUDIO -> item.durationMs?.let { formatDuration(it) }
+            MediaType.VIDEO, MediaType.AUDIO -> item.durationMs?.let { formatDurationMs(it) }
             MediaType.IMAGE -> null
         }
         if (badge != null) {
@@ -383,15 +384,6 @@ private fun AddToAlbumDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
     )
-}
-
-private fun formatDuration(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val hours = totalSeconds / 3600
-    val minutes = (totalSeconds % 3600) / 60
-    val seconds = totalSeconds % 60
-    return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds)
-    else "%d:%02d".format(minutes, seconds)
 }
 
 private fun shareMediaItems(context: Context, items: List<MediaItem>) {

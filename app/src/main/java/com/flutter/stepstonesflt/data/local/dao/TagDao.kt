@@ -26,9 +26,6 @@ interface TagDao {
     @Query("SELECT * FROM tags WHERE name = :name LIMIT 1")
     suspend fun getByName(name: String): Tag?
 
-    @Query("SELECT * FROM tags WHERE name LIKE :prefix || '%' ORDER BY name ASC LIMIT 10")
-    suspend fun getSuggestions(prefix: String): List<Tag>
-
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(tag: Tag): Long
 

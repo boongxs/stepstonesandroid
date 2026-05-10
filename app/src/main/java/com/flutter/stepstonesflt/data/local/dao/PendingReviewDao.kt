@@ -17,7 +17,4 @@ interface PendingReviewDao {
 
     @Delete
     suspend fun delete(review: PendingReview)
-
-    @Query("DELETE FROM pending_reviews WHERE albumId = :albumId AND (itemAId = :mediaId OR itemBId = :mediaId)")
-    suspend fun deleteForMedia(albumId: Long, mediaId: Long)
 }

@@ -109,7 +109,7 @@ fun AlbumSelector(
         AlertDialog(
             onDismissRequest = { albumToDelete = null },
             title = { Text("Delete album") },
-            text = { Text("Delete \"${album.name}\"? All media in this album will be permanently deleted.") },
+            text = { Text("Delete \"${album.name}\"? All media items in this album will be deleted.") },
             confirmButton = {
                 TextButton(onClick = { onDeleteAlbum(album); albumToDelete = null }) {
                     Text("Delete", color = MaterialTheme.colorScheme.error)

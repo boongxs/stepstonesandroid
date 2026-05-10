@@ -85,6 +85,7 @@ import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
 import com.flutter.stepstonesflt.data.local.entity.Tag
+import com.flutter.stepstonesflt.util.formatDurationMs
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
@@ -552,7 +553,7 @@ private fun PlaybackPill(
             )
         }
         Text(
-            text = "${formatMs(currentMs)} / ${formatMs(durationMs)}",
+            text = "${formatDurationMs(currentMs)} / ${formatDurationMs(durationMs)}",
             color = Color.White,
             fontSize = 13.sp,
         )
@@ -655,9 +656,3 @@ private fun shareEnlargedItem(context: Context, item: MediaItem) {
     context.startActivity(Intent.createChooser(intent, "Share"))
 }
 
-private fun formatMs(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "$minutes:${seconds.toString().padStart(2, '0')}"
-}

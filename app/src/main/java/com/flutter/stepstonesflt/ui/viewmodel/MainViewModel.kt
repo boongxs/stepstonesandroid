@@ -379,14 +379,17 @@ class MainViewModel @Inject constructor(
         _ingestInProgress.value = true
         viewModelScope.launch {
             var added = 0; var skipped = 0; var failed = 0
-            uris.forEach { uri ->
-                when (ingestRepository.ingest(uri, album.id)) {
-                    is IngestResult.Success -> added++
-                    is IngestResult.AlreadyInAlbum -> skipped++
-                    else -> failed++
+            try {
+                uris.forEach { uri ->
+                    when (ingestRepository.ingest(uri, album.id)) {
+                        is IngestResult.Success -> added++
+                        is IngestResult.AlreadyInAlbum -> skipped++
+                        else -> failed++
+                    }
                 }
+            } finally {
+                _ingestInProgress.value = false
             }
-            _ingestInProgress.value = false
             val parts = buildList {
                 if (added > 0) add("Added $added item${if (added > 1) "s" else ""} to ${album.name}")
                 if (skipped > 0) add("$skipped already in album")

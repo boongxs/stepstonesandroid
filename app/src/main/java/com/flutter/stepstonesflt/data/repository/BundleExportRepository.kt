@@ -33,16 +33,21 @@ class BundleExportRepository @Inject constructor(
             val metadata = JSONObject()
 
             items.forEach { item ->
+                val mediaFile = File(item.filePath)
+                if (!mediaFile.exists()) return@forEach
+
                 val entryName = uniqueName(item.originalFileName, usedNames)
                 usedNames += entryName
 
                 zip.putNextEntry(ZipEntry("media/$entryName"))
-                File(item.filePath).inputStream().use { it.copyTo(zip) }
+                mediaFile.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
 
                 item.thumbnailPath?.let { thumbPath ->
+                    val thumbFile = File(thumbPath)
+                    if (!thumbFile.exists()) return@let
                     zip.putNextEntry(ZipEntry("thumbs/$entryName"))
-                    File(thumbPath).inputStream().use { it.copyTo(zip) }
+                    thumbFile.inputStream().use { it.copyTo(zip) }
                     zip.closeEntry()
                 }
 

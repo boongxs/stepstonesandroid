@@ -38,7 +38,7 @@ interface MediaItemDao {
     """)
     fun countByAlbum(albumId: Long): Flow<Int>
 
-    @Query("SELECT * FROM media_items WHERE perceptualHash IS NULL")
+    @Query("SELECT * FROM media_items WHERE perceptualHash IS NULL AND fileType = 'IMAGE'")
     suspend fun getWithoutPHash(): List<MediaItem>
 
     @Query("""
