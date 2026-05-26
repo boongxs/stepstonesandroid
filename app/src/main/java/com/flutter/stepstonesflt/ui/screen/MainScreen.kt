@@ -52,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,25 +119,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                     .fillMaxSize()
                     .padding(paddingValues),
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(SelectionHeaderHeight)
-                        .background(SelectionHeaderBackground),
-                ) {
-                    if (isSelectionMode) {
-                        SelectionHeader(
-                            selectedCount = selectedItemIds.size,
-                            totalCount = mediaItems.size,
-                            allSelected = allSelected,
-                            onToggleSelectAll = {
-                                if (allSelected) viewModel.deselectAll() else viewModel.selectAll()
-                            },
-                            onCancel = viewModel::clearSelection,
-                        )
-                    }
-                }
-
                 AppTitle(modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
 
                 StepstonesSearchBar(
@@ -178,6 +160,32 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                             reviewPagerItems = items
                         })
                     }
+                }
+            }
+
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = paddingValues.calculateTopPadding())
+                        .height(SelectionHeaderHeight + 24.dp)
+                        .background(
+                            Brush.verticalGradient(
+                                0f to SelectionHeaderBackground,
+                                0.8f to SelectionHeaderBackground,
+                                1f to Color.Transparent,
+                            )
+                        ),
+                ) {
+                    SelectionHeader(
+                        selectedCount = selectedItemIds.size,
+                        totalCount = mediaItems.size,
+                        allSelected = allSelected,
+                        onToggleSelectAll = {
+                            if (allSelected) viewModel.deselectAll() else viewModel.selectAll()
+                        },
+                        onCancel = viewModel::clearSelection,
+                    )
                 }
             }
 
