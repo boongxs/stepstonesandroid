@@ -18,7 +18,6 @@ data class MediaItem(
     val durationMs: Long? = null,
     val width: Int? = null,
     val height: Int? = null,
-    val perceptualHash: String? = null,
     val mediaDate: Long? = null,
     val addedAt: Long = System.currentTimeMillis(),
 )

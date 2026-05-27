@@ -1,29 +1,23 @@
 package com.flutter.stepstonesflt.ui.viewmodel
 
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.flutter.stepstonesflt.data.local.dao.AlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaAlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaItemDao
-import com.flutter.stepstonesflt.data.local.dao.PendingReviewDao
 import com.flutter.stepstonesflt.data.local.dao.TagDao
 import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.data.local.entity.MediaAlbum
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
-import com.flutter.stepstonesflt.data.local.entity.MediaType
 import com.flutter.stepstonesflt.data.local.entity.MediaTag
-import com.flutter.stepstonesflt.data.local.entity.PendingReview
 import com.flutter.stepstonesflt.data.local.entity.Tag
-import com.flutter.stepstonesflt.util.PHashUtil
 import kotlinx.coroutines.flow.Flow
 import com.flutter.stepstonesflt.data.repository.BundleExportRepository
 import com.flutter.stepstonesflt.data.repository.BundleImportRepository
 import com.flutter.stepstonesflt.data.repository.IngestRepository
 import com.flutter.stepstonesflt.data.repository.IngestResult
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -47,7 +41,6 @@ class MainViewModel @Inject constructor(
     private val mediaItemDao: MediaItemDao,
     private val mediaAlbumDao: MediaAlbumDao,
     private val tagDao: TagDao,
-    private val pendingReviewDao: PendingReviewDao,
     private val ingestRepository: IngestRepository,
     private val bundleExportRepository: BundleExportRepository,
     private val bundleImportRepository: BundleImportRepository,
@@ -98,40 +91,6 @@ class MainViewModel @Inject constructor(
     fun openEnlargeView(id: Long) { _enlargeItemId.value = id }
     fun closeEnlargeView() { _enlargeItemId.value = null }
 
-    // Review (pHash duplicates)
-    val pendingReviewCount: StateFlow<Int> = selectedAlbum
-        .flatMapLatest { album ->
-            if (album != null) pendingReviewDao.countForAlbum(album.id) else flowOf(0)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val currentReview: StateFlow<PendingReview?> = selectedAlbum
-        .flatMapLatest { album ->
-            if (album != null) pendingReviewDao.getNextForAlbum(album.id) else flowOf(null)
-        }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
-
-    fun keepBoth(review: PendingReview) {
-        viewModelScope.launch { pendingReviewDao.delete(review) }
-    }
-
-    fun deleteReviewItem(review: PendingReview, deleteItemId: Long) {
-        val albumId = selectedAlbum.value?.id ?: return
-        viewModelScope.launch {
-            pendingReviewDao.delete(review)
-            mediaAlbumDao.delete(MediaAlbum(deleteItemId, albumId))
-            if (mediaAlbumDao.albumCountForMedia(deleteItemId) == 0) {
-                mediaItemDao.getById(deleteItemId)?.let { item ->
-                    File(item.filePath).delete()
-                    item.thumbnailPath?.let { File(it).delete() }
-                    mediaItemDao.deleteById(deleteItemId)
-                }
-            }
-        }
-    }
-
-    suspend fun getItemById(id: Long): MediaItem? = mediaItemDao.getById(id)
-
     fun deleteSingleItem(id: Long) {
         val albumId = selectedAlbum.value?.id ?: return
         closeEnlargeView()
@@ -172,17 +131,6 @@ class MainViewModel @Inject constructor(
 
     init {
         viewModelScope.launch { ensureDefaultAlbum() }
-        viewModelScope.launch(Dispatchers.IO) { backfillPHash() }
-    }
-
-    private suspend fun backfillPHash() {
-        mediaItemDao.getWithoutPHash().forEach { item ->
-            if (item.fileType != MediaType.IMAGE) return@forEach
-            val thumbPath = item.thumbnailPath ?: return@forEach
-            val bitmap = BitmapFactory.decodeFile(thumbPath) ?: return@forEach
-            val hash = try { PHashUtil.compute(bitmap) } catch (_: Exception) { return@forEach } finally { bitmap.recycle() }
-            mediaItemDao.update(item.copy(perceptualHash = hash))
-        }
     }
 
     private suspend fun ensureDefaultAlbum() {

@@ -18,11 +18,12 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "stepstones.db").build()
+        Room.databaseBuilder(context, AppDatabase::class.java, "stepstones.db")
+            .addMigrations(AppDatabase.MIGRATION_1_2)
+            .build()
 
     @Provides fun provideAlbumDao(db: AppDatabase): AlbumDao = db.albumDao()
     @Provides fun provideMediaItemDao(db: AppDatabase): MediaItemDao = db.mediaItemDao()
     @Provides fun provideMediaAlbumDao(db: AppDatabase): MediaAlbumDao = db.mediaAlbumDao()
     @Provides fun provideTagDao(db: AppDatabase): TagDao = db.tagDao()
-    @Provides fun providePendingReviewDao(db: AppDatabase): PendingReviewDao = db.pendingReviewDao()
 }

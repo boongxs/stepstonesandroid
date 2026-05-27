@@ -3,7 +3,6 @@ package com.flutter.stepstonesflt.ui.screen
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,16 +17,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -43,14 +38,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -60,12 +52,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.flutter.stepstonesflt.data.local.entity.Album
-import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.ui.components.AlbumSelector
 import com.flutter.stepstonesflt.ui.components.StepstonesSearchBar
 import com.flutter.stepstonesflt.ui.viewmodel.MainViewModel
 
-private val viewNames = listOf("Media Grid", "Review")
 private val SubtitleColor = Color(0xFF86D6BF)
 private val LibraryHeaderBackground = Color(0xFF222222)
 private val LibraryHeaderContent = Color(0xFFDEE4E0)
@@ -88,10 +78,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
     val selectedItemIds by viewModel.selectedItemIds.collectAsState()
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
     val enlargeItemId by viewModel.enlargeItemId.collectAsState()
-    val pendingReviewCount by viewModel.pendingReviewCount.collectAsState()
-    var reviewPagerItems by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
-    var reviewPagerInitialId by remember { mutableStateOf<Long?>(null) }
-    val pagerState = rememberPagerState(pageCount = { viewNames.size })
     val snackbarHostState = remember { SnackbarHostState() }
     val gridState = rememberLazyGridState()
     val coroutineScope = rememberCoroutineScope()
@@ -138,28 +124,8 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                     onDeleteAlbum = viewModel::deleteAlbum,
                 )
 
-                ViewLabel(
-                    currentPage = pagerState.currentPage,
-                    pageCount = viewNames.size,
-                    pendingReviewCount = pendingReviewCount,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
-                )
-
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                ) { page ->
-                    when (page) {
-                        0 -> MediaGridPage(viewModel, gridState)
-                        1 -> ReviewPage(viewModel, onOpenPager = { id, items ->
-                            reviewPagerInitialId = id
-                            reviewPagerItems = items
-                        })
-                    }
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    MediaGridPage(viewModel, gridState)
                 }
             }
 
@@ -179,7 +145,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                 ) {
                     SelectionHeader(
                         selectedCount = selectedItemIds.size,
-                        totalCount = mediaItems.size,
                         allSelected = allSelected,
                         onToggleSelectAll = {
                             if (allSelected) viewModel.deselectAll() else viewModel.selectAll()
@@ -187,15 +152,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                         onCancel = viewModel::clearSelection,
                     )
                 }
-            }
-
-            val pagerInitialId = reviewPagerInitialId
-            if (pagerInitialId != null && reviewPagerItems.isNotEmpty()) {
-                ReviewPagerView(
-                    items = reviewPagerItems,
-                    initialItemId = pagerInitialId,
-                    onClose = { reviewPagerInitialId = null },
-                )
             }
 
             val currentEnlargeId = enlargeItemId
@@ -256,7 +212,6 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
 @Composable
 private fun SelectionHeader(
     selectedCount: Int,
-    totalCount: Int,
     allSelected: Boolean,
     onToggleSelectAll: () -> Unit,
     onCancel: () -> Unit,
@@ -407,52 +362,6 @@ private fun LibraryHeader(
 }
 
 @Composable
-private fun ViewLabel(
-    currentPage: Int,
-    pageCount: Int,
-    pendingReviewCount: Int,
-    modifier: Modifier = Modifier,
-) {
-    val hasPending = pendingReviewCount > 0
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.Center,
-    ) {
-        Icon(
-            imageVector = Icons.Default.KeyboardArrowLeft,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.alpha(if (currentPage > 0) 1f else 0.2f),
-        )
-        Text(
-            text = viewNames[currentPage],
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 4.dp),
-        )
-        Box {
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.alpha(if (currentPage < pageCount - 1) 1f else 0.2f),
-            )
-            if (hasPending && currentPage == 0) {
-                Box(
-                    modifier = Modifier
-                        .size(7.dp)
-                        .align(Alignment.TopEnd)
-                        .offset(x = (-2).dp)
-                        .background(SubtitleColor, CircleShape),
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun IngestAlbumPickerDialog(
     albums: List<Album>,
     pendingCount: Int,
@@ -500,4 +409,3 @@ private fun IngestProgressDialog() {
         confirmButton = {},
     )
 }
-

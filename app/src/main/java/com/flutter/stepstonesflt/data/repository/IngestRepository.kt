@@ -8,12 +8,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.flutter.stepstonesflt.data.local.dao.MediaAlbumDao
 import com.flutter.stepstonesflt.data.local.dao.MediaItemDao
-import com.flutter.stepstonesflt.data.local.dao.PendingReviewDao
 import com.flutter.stepstonesflt.data.local.entity.MediaAlbum
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
-import com.flutter.stepstonesflt.data.local.entity.PendingReview
-import com.flutter.stepstonesflt.util.PHashUtil
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -36,7 +33,6 @@ class IngestRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val mediaItemDao: MediaItemDao,
     private val mediaAlbumDao: MediaAlbumDao,
-    private val pendingReviewDao: PendingReviewDao,
 ) {
     private val mediaDir = File(context.filesDir, "media").also { it.mkdirs() }
     private val thumbnailDir = File(context.filesDir, "thumbnails").also { it.mkdirs() }
@@ -92,30 +88,7 @@ class IngestRepository @Inject constructor(
 
         val id = mediaItemDao.insert(item)
         mediaAlbumDao.insert(MediaAlbum(id, albumId))
-        val inserted = mediaItemDao.getById(id)!!
-        try { computePHashAndQueueReviews(inserted, albumId) } catch (_: Exception) {}
         IngestResult.Success(id)
-    }
-
-    private suspend fun computePHashAndQueueReviews(item: MediaItem, albumId: Long) {
-        if (item.fileType != MediaType.IMAGE) return
-        val thumbPath = item.thumbnailPath ?: return
-        val bitmap = BitmapFactory.decodeFile(thumbPath) ?: return
-        val hash = try { PHashUtil.compute(bitmap) } catch (_: Exception) { return } finally { bitmap.recycle() }
-
-        mediaItemDao.update(item.copy(perceptualHash = hash))
-
-        val others = mediaItemDao.getHashedItemsForAlbum(albumId).filter { it.id != item.id }
-        others.forEach { other ->
-            val dist = PHashUtil.hammingDistance(hash, other.perceptualHash!!)
-            if (dist <= 10) {
-                val similarity = (64 - dist) / 64f * 100f
-                val (aId, bId) = if (item.id < other.id) item.id to other.id else other.id to item.id
-                pendingReviewDao.insert(
-                    PendingReview(itemAId = aId, itemBId = bId, albumId = albumId, similarityPercent = similarity)
-                )
-            }
-        }
     }
 
     private fun mimeTypeToMediaType(mimeType: String): MediaType? = when {
