@@ -1,5 +1,6 @@
 package com.flutter.stepstonesflt.ui.screen
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -8,8 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.calculatePan
-import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -63,13 +63,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntSize
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -80,8 +80,12 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.size.Size
+import me.saket.telephoto.zoomable.coil.ZoomableAsyncImage
+import me.saket.telephoto.zoomable.rememberZoomableImageState
+import me.saket.telephoto.zoomable.rememberZoomableState
+import me.saket.telephoto.zoomable.ZoomSpec
 import com.flutter.stepstonesflt.data.local.entity.Album
 import com.flutter.stepstonesflt.data.local.entity.MediaItem
 import com.flutter.stepstonesflt.data.local.entity.MediaType
@@ -110,6 +114,8 @@ fun EnlargeView(
     val initialPage = mediaItems.indexOfFirst { it.id == initialItemId }.coerceAtLeast(0)
     val pagerState = rememberPagerState(initialPage = initialPage) { mediaItems.size }
     val context = LocalContext.current
+    val view = LocalView.current
+    val window = remember(context) { (context as Activity).window }
 
     var toolbarVisible by remember { mutableStateOf(true) }
     var showAddToAlbumDialog by remember { mutableStateOf(false) }
@@ -134,6 +140,27 @@ fun EnlargeView(
         playerSeekFn = null
     }
 
+    SideEffect {
+        WindowInsetsControllerCompat(window, view).let { ctrl ->
+            if (toolbarVisible) {
+                ctrl.show(WindowInsetsCompat.Type.systemBars())
+            } else {
+                ctrl.hide(WindowInsetsCompat.Type.systemBars())
+                ctrl.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        onDispose { WindowInsetsControllerCompat(window, view).show(WindowInsetsCompat.Type.systemBars()) }
+    }
+
+    val handleContentTap = {
+        if (!showInfoPanel) {
+            toolbarVisible = !toolbarVisible
+            if (toolbarVisible) showInfoPanel = false
+        }
+    }
+
     val currentItemId = { mediaItems.getOrNull(pagerState.currentPage)?.id }
     BackHandler {
         if (showInfoPanel) showInfoPanel = false
@@ -154,7 +181,7 @@ fun EnlargeView(
                 .clickable(
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() },
-                ) { if (!showInfoPanel) toolbarVisible = !toolbarVisible },
+                ) { handleContentTap() },
         ) { page ->
             val isActivePage = page == pagerState.currentPage
             EnlargedMediaContent(
@@ -166,6 +193,7 @@ fun EnlargeView(
                 onProgressUpdate = if (isActivePage) { ms, dur -> playerCurrentMs = ms; playerDurationMs = dur } else null,
                 onSeekReady = if (isActivePage) { fn -> playerSeekFn = fn } else null,
                 onScaleChanged = { currentScale = it },
+                onTap = handleContentTap,
             )
         }
 
@@ -315,13 +343,14 @@ internal fun EnlargedMediaContent(
     onProgressUpdate: ((currentMs: Long, durationMs: Long) -> Unit)? = null,
     onSeekReady: ((seekFn: (Float) -> Unit) -> Unit)? = null,
     onScaleChanged: (Float) -> Unit = {},
+    onTap: () -> Unit = {},
 ) {
     val isPlayable = item.fileType == MediaType.VIDEO || item.fileType == MediaType.AUDIO
-    val canZoom = item.fileType == MediaType.IMAGE || item.fileType == MediaType.GIF
-    var scale by remember(item.id) { mutableStateOf(1f) }
-    var offsetX by remember(item.id) { mutableStateOf(0f) }
-    var offsetY by remember(item.id) { mutableStateOf(0f) }
-    var containerSize by remember { mutableStateOf(IntSize.Zero) }
+    val zoomableState = rememberZoomableImageState(rememberZoomableState(ZoomSpec(maxZoomFactor = 10f)))
+
+    LaunchedEffect(item.id) {
+        zoomableState.zoomableState.resetZoom(withAnimation = false)
+    }
 
     val context = LocalContext.current
     val exoPlayer = remember(item.id) {
@@ -412,11 +441,14 @@ internal fun EnlargedMediaContent(
         exoPlayer?.volume = if (isMuted) 0f else 1f
     }
 
+    LaunchedEffect(zoomableState.zoomableState.zoomFraction) {
+        onScaleChanged(1f + (zoomableState.zoomableState.zoomFraction ?: 0f) * 9f)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
-            .onSizeChanged { containerSize = it },
+            .background(Color.Black),
         contentAlignment = Alignment.Center,
     ) {
         when (item.fileType) {
@@ -442,54 +474,17 @@ internal fun EnlargedMediaContent(
                 modifier = Modifier.fillMaxSize(),
             )
             else -> {
-                val zoomModifier = if (canZoom) {
-                    Modifier
-                        .pointerInput(item.id) {
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                var keepGoing = true
-                                while (keepGoing) {
-                                    val event = awaitPointerEvent()
-                                    keepGoing = event.changes.any { it.pressed }
-                                    if (event.changes.any { it.isConsumed }) break
-                                    val multiTouch = event.changes.count { it.pressed } > 1
-                                    if (multiTouch || scale > 1f) {
-                                        val zoomChange = event.calculateZoom()
-                                        val panChange = event.calculatePan()
-                                        val newScale = (scale * zoomChange).coerceIn(1f, 5f)
-                                        scale = newScale
-                                        onScaleChanged(newScale)
-                                        if (newScale > 1f) {
-                                            val maxOffsetX = containerSize.width * (newScale - 1) / 2f
-                                            val maxOffsetY = containerSize.height * (newScale - 1) / 2f
-                                            offsetX = (offsetX + panChange.x).coerceIn(-maxOffsetX, maxOffsetX)
-                                            offsetY = (offsetY + panChange.y).coerceIn(-maxOffsetY, maxOffsetY)
-                                        } else {
-                                            offsetX = 0f
-                                            offsetY = 0f
-                                        }
-                                        event.changes.forEach { it.consume() }
-                                    }
-                            }
-                            }
-                        }
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = offsetX
-                            translationY = offsetY
-                        }
-                } else Modifier
-                AsyncImage(
+                ZoomableAsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data(item.filePath)
+                        .size(Size.ORIGINAL)
                         .crossfade(true)
                         .build(),
                     contentDescription = null,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .then(zoomModifier),
+                    state = zoomableState,
+                    modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Fit,
+                    onClick = { onTap() },
                 )
             }
         }

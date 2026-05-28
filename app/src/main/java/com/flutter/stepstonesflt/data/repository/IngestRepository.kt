@@ -3,6 +3,8 @@ package com.flutter.stepstonesflt.data.repository
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -153,8 +155,9 @@ class IngestRepository @Inject constructor(
                 val opts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeFile(file.absolutePath, opts)
                 val bitmap = BitmapFactory.decodeFile(file.absolutePath)
-                val thumb = bitmap?.let { saveThumbnail(it) }
-                bitmap?.recycle()
+                val rotated = bitmap?.let { applyExifRotation(it, file.absolutePath) }
+                val thumb = rotated?.let { saveThumbnail(it) }
+                rotated?.recycle()
                 Metadata(thumb, opts.outWidth.coerceAtLeast(0), opts.outHeight.coerceAtLeast(0), null)
             }
             MediaType.GIF -> {
@@ -202,6 +205,24 @@ class IngestRepository @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun applyExifRotation(bitmap: Bitmap, filePath: String): Bitmap {
+        val orientation = try {
+            ExifInterface(filePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        } catch (_: Exception) {
+            ExifInterface.ORIENTATION_NORMAL
+        }
+        val degrees = when (orientation) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+            else -> return bitmap
+        }
+        val matrix = Matrix().apply { postRotate(degrees) }
+        val rotated = Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+        bitmap.recycle()
+        return rotated
     }
 
     private fun saveThumbnail(bitmap: Bitmap): String? {

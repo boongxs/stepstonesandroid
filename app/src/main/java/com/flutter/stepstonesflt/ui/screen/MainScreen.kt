@@ -44,7 +44,6 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -134,14 +133,8 @@ fun MainScreen(viewModel: MainViewModel = hiltViewModel()) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = paddingValues.calculateTopPadding())
-                        .height(SelectionHeaderHeight + 24.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                0f to SelectionHeaderBackground,
-                                0.8f to SelectionHeaderBackground,
-                                1f to Color.Transparent,
-                            )
-                        ),
+                        .height(SelectionHeaderHeight)
+                        .background(SelectionHeaderBackground),
                 ) {
                     SelectionHeader(
                         selectedCount = selectedItemIds.size,
